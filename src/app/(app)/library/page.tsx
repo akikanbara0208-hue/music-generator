@@ -1,23 +1,66 @@
 "use client";
 
-import { useState } from "react";
-import { Play, Pause, Download, Trash2, Music2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Play, Pause, Download, Trash2, Music2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
-const MOCK_SONGS = [
-  { id: "1", title: "夏の夕暮れ", prompt: "夏の夕暮れ、海辺でゆったりと流れるような曲", tags: ["明るい", "アコースティック"], duration: "2:10", createdAt: "2026-06-13" },
-  { id: "2", title: "深夜のジャズ", prompt: "深夜のバーで流れる落ち着いたジャズ", tags: ["落ち着いた", "ジャズ"], duration: "3:05", createdAt: "2026-06-12" },
-  { id: "3", title: "Epic Battle", prompt: "壮大なバトルシーン、緊張感のあるオーケストラ", tags: ["緊張感", "シネマティック"], duration: "2:48", createdAt: "2026-06-11" },
-];
+type Song = {
+  id: string;
+  title: string;
+  prompt: string;
+  tags: string[];
+  audioUrl: string;
+  duration: number;
+  createdAt: string;
+};
 
 export default function LibraryPage() {
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [loading, setLoading] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const togglePlay = (id: string) => {
-    setPlayingId((prev) => (prev === id ? null : id));
+  useEffect(() => {
+    fetch("/api/songs")
+      .then((r) => r.json())
+      .then((data) => setSongs(Array.isArray(data) ? data : []))
+      .catch(() => toast.error("楽曲の読み込みに失敗しました"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const togglePlay = (song: Song) => {
+    if (playingId === song.id) {
+      audioRef.current?.pause();
+      setPlayingId(null);
+    } else {
+      if (audioRef.current) audioRef.current.pause();
+      const audio = new Audio(song.audioUrl);
+      audio.play();
+      audio.onended = () => setPlayingId(null);
+      audioRef.current = audio;
+      setPlayingId(song.id);
+    }
   };
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setSongs((prev) => prev.filter((s) => s.id !== id));
+      if (playingId === id) {
+        audioRef.current?.pause();
+        setPlayingId(null);
+      }
+      toast.success("削除しました");
+    } else {
+      toast.error("削除に失敗しました");
+    }
+  };
+
+  const formatDate = (str: string) => new Date(str).toLocaleDateString("ja-JP");
+  const formatDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
@@ -26,7 +69,11 @@ export default function LibraryPage() {
         <p className="text-muted-foreground text-sm">生成した楽曲の一覧</p>
       </div>
 
-      {MOCK_SONGS.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-24">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : songs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
           <Music2 className="w-12 h-12 mb-4 opacity-30" />
           <p className="text-sm">まだ楽曲がありません</p>
@@ -34,51 +81,30 @@ export default function LibraryPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {MOCK_SONGS.map((song) => (
+          {songs.map((song) => (
             <Card key={song.id}>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-start gap-3">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="w-9 h-9 shrink-0 mt-0.5"
-                    onClick={() => togglePlay(song.id)}
-                  >
-                    {playingId === song.id ? (
-                      <Pause className="w-4 h-4" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
+                  <Button variant="outline" size="icon" className="w-9 h-9 shrink-0 mt-0.5" onClick={() => togglePlay(song)}>
+                    {playingId === song.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   </Button>
-
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm">{song.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {song.prompt}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      {song.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{song.prompt}</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {song.tags?.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                       ))}
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {song.duration}
-                      </span>
+                      <span className="text-xs text-muted-foreground ml-auto">{formatDuration(song.duration)} · {formatDate(song.createdAt)}</span>
                     </div>
-
-                    {playingId === song.id && (
-                      <div className="mt-3 h-1 bg-secondary rounded-full">
-                        <div className="h-full w-1/4 bg-primary rounded-full transition-all" />
-                      </div>
-                    )}
                   </div>
-
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="w-8 h-8">
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive hover:text-destructive">
+                    <a href={song.audioUrl} download>
+                      <Button variant="ghost" size="icon" className="w-8 h-8">
+                        <Download className="w-3.5 h-3.5" />
+                      </Button>
+                    </a>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive hover:text-destructive" onClick={() => handleDelete(song.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>

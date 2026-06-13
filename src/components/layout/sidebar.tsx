@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Music2, Library, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClerk, useUser } from "@clerk/nextjs";
 
 const navItems = [
   { href: "/generate", label: "生成", icon: Music2 },
@@ -13,6 +14,8 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { signOut } = useClerk();
+  const { user } = useUser();
 
   return (
     <aside className="flex flex-col w-56 min-h-screen bg-card border-r border-border px-3 py-6">
@@ -39,7 +42,14 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <button className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+      <div className="px-3 mb-3">
+        <p className="text-xs text-muted-foreground truncate">{user?.primaryEmailAddress?.emailAddress}</p>
+      </div>
+
+      <button
+        onClick={() => signOut({ redirectUrl: "/login" })}
+        className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+      >
         <LogOut className="w-4 h-4" />
         ログアウト
       </button>
